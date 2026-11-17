@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
@@ -39,6 +40,11 @@ async function Archive() {
     .from('messages')
     .select('*', { count: 'exact', head: true })
 
+  const { data: sources } = await supabase
+    .from('sources')
+    .select('id, label, status')
+    .order('imported_at')
+
   return (
     <>
       <p className="mt-2 text-sm opacity-70">Signed in as {String(claims.email ?? '')}</p>
@@ -60,8 +66,26 @@ async function Archive() {
           <div key={space.id} className="rounded-xl border border-current/20 p-6">
             <h2 className="text-xl font-medium">{space.name}</h2>
             <p className="mt-1 text-sm opacity-70">
-              {messageCount ?? 0} messages preserved so far. Importing comes next.
+              {(messageCount ?? 0).toLocaleString()} messages preserved so far.
             </p>
+            {sources && sources.length > 0 && (
+              <ul className="mt-4 space-y-1 text-sm">
+                {sources.map((source) => (
+                  <li key={source.id}>
+                    {source.label}
+                    <span className="opacity-60">
+                      {source.status === 'complete' ? ' · imported' : ' · import not finished'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Link
+              href="/import"
+              className="mt-5 inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"
+            >
+              Import a WhatsApp chat
+            </Link>
           </div>
         ))}
       </section>
