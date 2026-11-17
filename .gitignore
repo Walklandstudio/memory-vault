@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Family data – never commit
+/private-data/
+*.zip
+_chat*.txt
+.env*.local
