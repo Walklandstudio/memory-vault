@@ -45,6 +45,25 @@ async function Archive() {
     .select('id, label, status')
     .order('imported_at')
 
+  const { count: mediaCount } = await supabase
+    .from('media')
+    .select('*', { count: 'exact', head: true })
+
+  // Latest previews, shown through short-lived private links (valid for 1 hour)
+  const { data: recent } = await supabase
+    .from('media')
+    .select('id, thumb_path')
+    .not('thumb_path', 'is', null)
+    .order('taken_at', { ascending: false })
+    .limit(8)
+  const thumbPaths = (recent ?? []).map((m) => m.thumb_path as string)
+  const { data: signed } = thumbPaths.length
+    ? await supabase.storage.from('media').createSignedUrls(thumbPaths, 3600)
+    : { data: [] }
+  const previews = (signed ?? []).flatMap((s) =>
+    s.signedUrl ? [{ path: s.path ?? s.signedUrl, url: s.signedUrl }] : []
+  )
+
   return (
     <>
       <p className="mt-2 text-sm opacity-70">Signed in as {String(claims.email ?? '')}</p>
@@ -66,8 +85,22 @@ async function Archive() {
           <div key={space.id} className="rounded-xl border border-current/20 p-6">
             <h2 className="text-xl font-medium">{space.name}</h2>
             <p className="mt-1 text-sm opacity-70">
-              {(messageCount ?? 0).toLocaleString()} messages preserved so far.
+              {(messageCount ?? 0).toLocaleString()} messages and{' '}
+              {(mediaCount ?? 0).toLocaleString()} photos, videos & voice notes preserved so far.
             </p>
+            {previews.length > 0 && (
+              <div className="mt-4 grid grid-cols-4 gap-2">
+                {previews.map((p) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={p.path}
+                    src={p.url}
+                    alt=""
+                    className="aspect-square w-full rounded-lg object-cover"
+                  />
+                ))}
+              </div>
+            )}
             {sources && sources.length > 0 && (
               <ul className="mt-4 space-y-1 text-sm">
                 {sources.map((source) => (
