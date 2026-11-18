@@ -7,10 +7,11 @@ export default function ImportPage() {
       <Link href="/" className="text-sm underline opacity-70 hover:opacity-100">
         ← Back to your archive
       </Link>
-      <h1 className="mt-4 text-3xl font-semibold tracking-tight">Import a WhatsApp chat</h1>
+      <h1 className="mt-4 text-3xl font-semibold tracking-tight">Import memories</h1>
       <p className="mt-2 text-sm opacity-70">
-        Choose a chat export zip from your iPhone. The zip is read on this computer. Only the
-        messages are sent to your private archive in this step. Photos and videos come next.
+        Choose a WhatsApp chat export from your iPhone, or an Instagram “Download your
+        information” export in JSON format. The zip is read on this computer, and only what
+        belongs in your archive is sent to it.
       </p>
       <Importer />
     </main>

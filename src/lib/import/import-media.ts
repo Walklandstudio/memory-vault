@@ -47,8 +47,10 @@ export async function importMedia(options: {
   mediaFiles: Map<string, FileEntry>
   makeThumbnail: MakeThumbnail
   onProgress: (progress: MediaProgress) => void
+  /** When each file was taken, if the file name doesn't say (e.g. Instagram) */
+  takenLocal?: Map<string, string>
 }): Promise<MediaProgress> {
-  const { supabase, spaceId, sourceId, mediaFiles, makeThumbnail, onProgress } = options
+  const { supabase, spaceId, sourceId, mediaFiles, makeThumbnail, onProgress, takenLocal } = options
 
   const { data, error } = await supabase.rpc('pending_media', { p_source_id: sourceId })
   if (error) throw new Error(`Couldn’t check which files still need uploading: ${error.message}`)
@@ -100,6 +102,7 @@ export async function importMedia(options: {
           progress.missingFromZip++
         } else {
           const record = await processFile(supabase, spaceId, fileName, entry, makeThumbnail)
+          record.takenLocal ??= takenLocal?.get(fileName) ?? null
           progress.uploadedBytes += record.byteSize
           waiting.push(record)
           if (waiting.length >= REGISTER_EVERY) await save()

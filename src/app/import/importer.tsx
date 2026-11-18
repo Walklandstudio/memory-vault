@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { parseIosChat, type ParseResult } from '@/lib/whatsapp/whatsapp-ios-parser'
-import { openWhatsAppZip, type OpenedExport } from '@/lib/import/whatsapp-zip'
+import type { ParseResult } from '@/lib/whatsapp/whatsapp-ios-parser'
+import { openExport, type ExportKind, type OpenedExport } from '@/lib/import/open-export'
 import {
   findOrCreateSource,
   importMessages,
@@ -17,10 +17,19 @@ import { browserThumbnail } from '@/lib/import/thumbnails'
 
 type Space = { id: string; name: string }
 
+// Times in exports are shown in this timezone (South Africa has no daylight saving)
+const TIME_ZONE = 'Africa/Johannesburg'
+
 type State =
   | { step: 'choose' }
   | { step: 'reading'; fileName: string }
-  | { step: 'ready'; fileName: string; parsed: ParseResult; summary: ExportSummary }
+  | {
+      step: 'ready'
+      fileName: string
+      kind: ExportKind
+      parsed: ParseResult
+      summary: ExportSummary
+    }
   | { step: 'messages'; summary: ExportSummary; done: number; total: number }
   | { step: 'media'; summary: ExportSummary; totals: ImportTotals; media: MediaProgress }
   | {
@@ -87,29 +96,34 @@ export function Importer() {
     openZip.current = null
     setState({ step: 'reading', fileName: file.name })
     try {
-      const opened = await openWhatsAppZip(file)
+      const opened = await openExport(file, { sourceId: file.name, timeZone: TIME_ZONE })
       openZip.current = opened
-      const parsed = parseIosChat(opened.chatText, file.name)
-      if (parsed.messages.length === 0) throw new Error('No messages were found in this chat.')
+      const parsed = opened.parsed
+      if (parsed.messages.length === 0) throw new Error('Nothing to import was found in this export.')
       const summary = summariseExport(
         parsed,
         new Set(opened.mediaFiles.keys()),
         file.name.replace(/\.zip$/i, '')
       )
-      setState({ step: 'ready', fileName: file.name, parsed, summary })
+      setState({ step: 'ready', fileName: file.name, kind: opened.kind, parsed, summary })
     } catch (err) {
       setState({ step: 'error', message: err instanceof Error ? err.message : String(err) })
     }
   }
 
-  async function startImport(fileName: string, parsed: ParseResult, summary: ExportSummary) {
+  async function startImport(
+    fileName: string,
+    kind: ExportKind,
+    parsed: ParseResult,
+    summary: ExportSummary
+  ) {
     const opened = openZip.current
     if (!space || !opened) return
     const supabase = createClient()
     const wakeLock = await keepScreenAwake()
     setState({ step: 'messages', summary, done: 0, total: parsed.messages.length })
     try {
-      const source = await findOrCreateSource(supabase, space.id, summary.chatName, fileName)
+      const source = await findOrCreateSource(supabase, space.id, summary.chatName, fileName, kind)
 
       const totals = await importMessages(supabase, source.id, parsed, summary, (done, total) =>
         setState({ step: 'messages', summary, done, total })
@@ -122,6 +136,10 @@ export function Importer() {
         mediaFiles: opened.mediaFiles,
         makeThumbnail: browserThumbnail,
         onProgress: (media) => setState({ step: 'media', summary, totals, media }),
+        // Instagram file names carry no date, so use the date of the post
+        takenLocal: new Map(
+          parsed.messages.flatMap((m) => m.attachments.map((a) => [a.fileName, m.timestamp] as const))
+        ),
       })
 
       setState({ step: 'finished', summary, totals, media, resumed: !source.isNew })
@@ -167,7 +185,7 @@ export function Importer() {
 
       {(state.step === 'choose' || state.step === 'error' || state.step === 'finished') && (
         <label className="block cursor-pointer rounded-xl border-2 border-dashed border-current/25 p-8 text-center hover:border-current/50">
-          <span className="font-medium">Choose a WhatsApp export (.zip)</span>
+          <span className="font-medium">Choose a WhatsApp or Instagram export (.zip)</span>
           <span className="mt-1 block text-sm opacity-70">Large files are fine</span>
           <input
             type="file"
@@ -189,16 +207,22 @@ export function Importer() {
       {state.step === 'ready' && (
         <div className="space-y-4">
           <SummaryCard summary={state.summary} />
+          {state.kind === 'instagram' && (
+            <p className="text-sm opacity-70">
+              Only your posts, reels and stories are imported. Your direct messages, likes, ads
+              data and post locations are ignored and never leave this computer.
+            </p>
+          )}
           <p className="text-sm opacity-70">
             Messages already in your archive are skipped, so it’s safe to import a chat again to
             finish an upload that stopped.
           </p>
           <div className="flex flex-wrap gap-3">
             <button
-              onClick={() => startImport(state.fileName, state.parsed, state.summary)}
+              onClick={() => startImport(state.fileName, state.kind, state.parsed, state.summary)}
               className="rounded-lg bg-foreground px-4 py-2 font-medium text-background hover:opacity-90"
             >
-              Import messages, photos & videos
+              {state.kind === 'instagram' ? 'Import posts, photos & videos' : 'Import messages, photos & videos'}
             </button>
             <button
               onClick={() => setState({ step: 'choose' })}
@@ -319,8 +343,8 @@ function Progress({
 
 function SummaryCard({ summary }: { summary: ExportSummary }) {
   const rows: [string, string][] = [
-    ['Chat', summary.chatName],
-    ['Messages', summary.messages.toLocaleString()],
+    ['Source', summary.chatName],
+    ['Messages & posts', summary.messages.toLocaleString()],
     ['People', summary.people.toLocaleString()],
     ['From', formatDate(summary.firstDate)],
     ['To', formatDate(summary.lastDate)],

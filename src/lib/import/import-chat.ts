@@ -45,13 +45,14 @@ export async function findOrCreateSource(
   supabase: SupabaseClient,
   spaceId: string,
   chatName: string,
-  fileName: string
+  fileName: string,
+  kind: 'whatsapp_ios' | 'instagram' = 'whatsapp_ios'
 ): Promise<{ id: string; isNew: boolean }> {
   const { data: existing, error: findError } = await supabase
     .from('sources')
     .select('id')
     .eq('space_id', spaceId)
-    .eq('kind', 'whatsapp_ios')
+    .eq('kind', kind)
     .eq('chat_name', chatName)
     .order('imported_at')
     .limit(1)
@@ -62,7 +63,7 @@ export async function findOrCreateSource(
     .from('sources')
     .insert({
       space_id: spaceId,
-      kind: 'whatsapp_ios',
+      kind,
       label: chatName,
       chat_name: chatName,
       original_filename: fileName,
