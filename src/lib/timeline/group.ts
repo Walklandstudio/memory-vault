@@ -101,3 +101,94 @@ export function groupIntoDays(messages: TimelineMessage[]): Day[] {
   }
   return days
 }
+
+// ---------- Fan mail ----------
+// On a day with photos, replies from other people fold into one "fan mail" row
+// so the photos lead. Days that are only conversation are shown in full.
+
+export type DayEntry =
+  | { type: 'moment'; moment: Moment }
+  | { type: 'fanmail'; key: string; moments: Moment[]; names: string[]; messages: number }
+
+const hasGallery = (m: Moment) => m.blocks.some((b) => b.type === 'gallery')
+
+export function withFanMail(day: Day): DayEntry[] {
+  const entries: DayEntry[] = []
+  let photoSender: string | null = null
+
+  for (const moment of day.moments) {
+    if (moment.system) {
+      entries.push({ type: 'moment', moment })
+      continue
+    }
+    if (hasGallery(moment)) {
+      photoSender = moment.sender
+      entries.push({ type: 'moment', moment })
+      continue
+    }
+    const isReply = photoSender !== null && moment.sender !== photoSender
+    if (!isReply) {
+      entries.push({ type: 'moment', moment })
+      continue
+    }
+    const last = entries[entries.length - 1]
+    const group =
+      last?.type === 'fanmail'
+        ? last
+        : (entries[entries.push({ type: 'fanmail', key: moment.key, moments: [], names: [], messages: 0 }) - 1] as Extract<
+            DayEntry,
+            { type: 'fanmail' }
+          >)
+    group.moments.push(moment)
+    group.messages += moment.blocks.length
+    if (moment.sender && !group.names.includes(moment.sender)) group.names.push(moment.sender)
+  }
+  return entries
+}
+
+// ---------- Photo viewer ----------
+
+export interface ViewerItem {
+  /** "<messageId>#<attachment position>", so a photo in the timeline can find its place in the viewer */
+  key: string
+  mediaId: string
+  kind: string
+  thumbPath: string | null
+  width: number | null
+  height: number | null
+  messageId: string
+  caption: string
+  sender: string | null
+  time: string
+}
+
+const VIEWABLE = new Set(['photo', 'video', 'gif', 'sticker'])
+
+/** Every photo and video in a day, in order, for swiping through full screen. */
+export function viewerItems(day: Day): ViewerItem[] {
+  const items: ViewerItem[] = []
+  for (const moment of day.moments) {
+    for (const block of moment.blocks) {
+      if (block.type !== 'gallery') continue
+      for (const item of block.items) {
+        const media = item.attachment?.media
+        if (!media || !VIEWABLE.has(media.kind)) continue
+        items.push({
+          key: viewerKey(item),
+          mediaId: media.id,
+          kind: media.kind,
+          thumbPath: media.thumbPath,
+          width: media.width,
+          height: media.height,
+          messageId: item.messageId,
+          caption: item.caption,
+          sender: moment.sender,
+          time: moment.time,
+        })
+      }
+    }
+  }
+  return items
+}
+
+export const viewerKey = (item: GalleryItem) => `${item.messageId}#${item.attachment?.position ?? 0}`

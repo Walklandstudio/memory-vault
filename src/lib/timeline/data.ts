@@ -166,3 +166,30 @@ export async function searchMessages(db: Db, spaceId: string, query: string): Pr
     (r) => ({ id: r.id, localTime: r.local_time, senderName: r.sender_name, body: r.body })
   )
 }
+
+export interface ArchiveSummary {
+  messages: number
+  files: number
+  people: number
+  since: string | null
+  onlyInstagram: boolean
+}
+
+export async function getArchiveSummary(db: Db, spaceId: string): Promise<ArchiveSummary> {
+  const { data, error } = await db.rpc('archive_summary', { p_space_id: spaceId })
+  if (error) throw new Error(error.message)
+  return data as ArchiveSummary
+}
+
+export interface FeaturedDay {
+  day: string
+  photos: number
+  thumbs: string[] | null
+  caption: string | null
+}
+
+export async function getFeaturedDay(db: Db, spaceId: string): Promise<FeaturedDay | null> {
+  const { data, error } = await db.rpc('featured_day', { p_space_id: spaceId })
+  if (error) throw new Error(error.message)
+  return (data as FeaturedDay | null) ?? null
+}

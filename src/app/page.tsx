@@ -2,185 +2,195 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getSpaces, type Space } from '@/lib/timeline/data'
+import {
+  getArchiveSummary,
+  getFeaturedDay,
+  getSpaces,
+  type ArchiveSummary,
+  type Space,
+} from '@/lib/timeline/data'
+import { count, firstNameFromEmail, longDay, monthName, plural } from '@/lib/display'
+import { BottomNav } from '@/components/bottom-nav'
 import { createArchive } from './actions'
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 
 export default function Home({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 p-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold tracking-tight">Memory Vault</h1>
-        <form action="/auth/signout" method="post">
-          <button type="submit" className="text-sm underline opacity-70 hover:opacity-100">
-            Sign out
-          </button>
-        </form>
-      </header>
-
-      {/* Anything that reads the login session loads inside this boundary */}
-      <Suspense fallback={<p className="mt-10 text-sm opacity-70">Opening your archives…</p>}>
-        <Archives searchParams={searchParams} />
+    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-5 pt-[max(1.5rem,env(safe-area-inset-top))]">
+      <Suspense fallback={<p className="mt-10 text-muted">Opening your archives…</p>}>
+        <HomeContent searchParams={searchParams} />
       </Suspense>
     </main>
   )
 }
 
-async function Archives({ searchParams }: { searchParams: SearchParams }) {
+async function HomeContent({ searchParams }: { searchParams: SearchParams }) {
   const { error: formError } = await searchParams
   const supabase = await createClient()
 
-  // Always verify who is signed in on the server before showing anything.
   const { data } = await supabase.auth.getClaims()
   const claims = data?.claims
   if (!claims) redirect('/login')
 
-  let spaces: Space[] = []
-  let loadError: string | null = null
-  try {
-    spaces = await getSpaces(supabase)
-  } catch (err) {
-    loadError = err instanceof Error ? err.message : String(err)
-  }
+  const spaces = await getSpaces(supabase)
+  const summaries = await Promise.all(spaces.map((s) => getArchiveSummary(supabase, s.id)))
+  const firstWithContent = spaces.find((_, i) => summaries[i].messages > 0)
+  const name = firstNameFromEmail(String(claims.email ?? ''))
 
   return (
     <>
-      <p className="mt-2 text-sm opacity-70">Signed in as {String(claims.email ?? '')}</p>
+      <header className="flex items-center justify-between">
+        <p className="text-muted">{name ? `Hi ${name}` : 'Hello'}</p>
+        <form action="/auth/signout" method="post">
+          <button type="submit" className="min-h-11 px-2 text-[15px] text-muted underline underline-offset-4">
+            Sign out
+          </button>
+        </form>
+      </header>
 
-      <section className="mt-10 space-y-6">
-        {loadError && (
-          <p className="rounded-lg border border-red-600/40 p-4 text-sm text-red-600">
-            Couldn’t load your archives: {loadError}
-          </p>
-        )}
+      <h1 className="mt-3 text-[44px] leading-[0.95] font-extrabold tracking-[-1.5px]">
+        Your
+        <br />
+        archives
+      </h1>
 
-        {spaces.map((space) => (
-          <ArchiveCard key={space.id} space={space} />
+      <section className="mt-6 flex flex-col gap-4" aria-label="Archives">
+        {spaces.map((space, i) => (
+          <MembershipCard key={space.id} space={space} summary={summaries[i]} index={i} />
         ))}
+      </section>
 
-        <form action={createArchive} className="rounded-xl border border-dashed border-current/25 p-6">
-          <label htmlFor="new-archive" className="font-medium">
-            Create a new archive
-          </label>
-          <p className="mt-1 text-sm opacity-70">
-            Each archive has its own timeline, imports and privacy.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
+      {firstWithContent && (
+        <Suspense fallback={null}>
+          <WorthAnotherLook space={firstWithContent} />
+        </Suspense>
+      )}
+
+      <div className="mt-8 flex flex-col gap-3">
+        <Link
+          href={`/import${spaces[0] ? `?space=${spaces[0].id}` : ''}`}
+          className="flex h-12 items-center justify-center rounded-2xl bg-ink font-semibold text-white"
+        >
+          Import memories
+        </Link>
+        <details className="group rounded-2xl border-2 border-dashed border-[#9aa3c7]" open={Boolean(formError)}>
+          <summary className="flex h-12 cursor-pointer list-none items-center justify-center font-semibold">
+            Start a new archive
+          </summary>
+          <form action={createArchive} className="flex flex-col gap-3 px-4 pb-4">
+            <label htmlFor="new-archive" className="text-[15px] text-muted">
+              Each archive has its own timeline and its own privacy.
+            </label>
             <input
               id="new-archive"
               name="name"
               required
               maxLength={100}
-              placeholder="e.g. My Instagram"
-              className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-current/60"
+              placeholder="For example: Grandpa’s letters"
+              className="h-12 rounded-xl border border-line bg-card px-3 outline-none focus:border-cobalt"
             />
-            <button
-              type="submit"
-              className="rounded-lg border border-current/25 px-4 py-2 text-sm hover:border-current/50"
-            >
+            <button type="submit" className="h-12 rounded-xl bg-cobalt font-semibold text-white">
               Create archive
             </button>
-          </div>
-          {formError && (
-            <p className="mt-3 text-sm text-red-600" role="alert">
-              {formError === 'name' ? 'Please give the archive a name.' : 'The archive couldn’t be created. Please try again.'}
-            </p>
-          )}
-        </form>
-      </section>
+            {formError && (
+              <p className="text-[15px] text-[#B3261E]" role="alert">
+                {formError === 'name'
+                  ? 'Give the archive a name to create it.'
+                  : 'The archive wasn’t created. Check your connection and try again.'}
+              </p>
+            )}
+          </form>
+        </details>
+      </div>
+
+      <BottomNav active="home" spaceId={firstWithContent?.id ?? spaces[0]?.id} />
     </>
   )
 }
 
-async function ArchiveCard({ space }: { space: Space }) {
-  const supabase = await createClient()
+// Each archive is a fan club membership card, with a tear-off stub to open it.
+const CARD_STYLES = [
+  { card: 'bg-cobalt text-white', sub: 'text-cobalt-soft', stub: 'border-[#8fa0ff] text-sunny' },
+  { card: 'bg-sunny text-ink', sub: 'text-[#5a4a00]', stub: 'border-[#c9a200] text-ink' },
+  { card: 'bg-ink text-white', sub: 'text-night-muted', stub: 'border-[#4a5280] text-sunny' },
+]
 
-  const [{ count: messageCount }, { count: mediaCount }, { data: sources }, { data: recent }] =
-    await Promise.all([
-      supabase.from('messages').select('*', { count: 'exact', head: true }).eq('space_id', space.id),
-      supabase.from('media').select('*', { count: 'exact', head: true }).eq('space_id', space.id),
-      supabase
-        .from('sources')
-        .select('id, label, status')
-        .eq('space_id', space.id)
-        .order('imported_at'),
-      supabase
-        .from('media')
-        .select('id, thumb_path')
-        .eq('space_id', space.id)
-        .eq('kind', 'photo')
-        .not('thumb_path', 'is', null)
-        .order('taken_at', { ascending: false })
-        .limit(8),
-    ])
-
-  // Latest previews, shown through short-lived private links (valid for 1 hour)
-  const thumbPaths = (recent ?? []).map((m) => m.thumb_path as string)
-  const { data: signed } = thumbPaths.length
-    ? await supabase.storage.from('media').createSignedUrls(thumbPaths, 3600)
-    : { data: [] }
-  const previews = (signed ?? []).flatMap((s) =>
-    s.signedUrl ? [{ path: s.path ?? s.signedUrl, url: s.signedUrl }] : []
-  )
-  const isEmpty = (messageCount ?? 0) === 0 && (mediaCount ?? 0) === 0
+function MembershipCard({ space, summary, index }: { space: Space; summary: ArchiveSummary; index: number }) {
+  const style = CARD_STYLES[index % CARD_STYLES.length]
+  const empty = summary.messages === 0
+  const href = empty ? `/import?space=${space.id}` : `/timeline?space=${space.id}`
 
   return (
-    <div className="rounded-xl border border-current/20 p-6">
-      <h2 className="text-xl font-medium">{space.name}</h2>
-      <p className="mt-1 text-sm opacity-70">
-        {isEmpty
-          ? 'Nothing imported yet.'
-          : `${(messageCount ?? 0).toLocaleString()} messages and ${(mediaCount ?? 0).toLocaleString()} photos, videos & voice notes preserved so far.`}
-      </p>
+    <Link href={href} className={`flex overflow-hidden rounded-[20px] ${style.card}`}>
+      <div className="flex flex-1 flex-col gap-2.5 p-[18px]">
+        <p className={`text-[14px] ${style.sub}`}>
+          {summary.since ? `Member since ${monthName(summary.since.slice(0, 7))}` : 'Nothing imported yet'}
+        </p>
+        <p className="text-[28px] leading-none font-extrabold tracking-[-0.5px]">{space.name}</p>
+        {!empty && (
+          <p className="flex flex-wrap gap-x-4 text-[15px]">
+            <span>
+              <strong className="text-[20px] font-extrabold">{count(summary.files)}</strong> photos &amp; videos
+            </span>
+            {summary.onlyInstagram ? (
+              <span>
+                <strong className="text-[20px] font-extrabold">{count(summary.messages)}</strong> posts
+              </span>
+            ) : (
+              <span>
+                <strong className="text-[20px] font-extrabold">{count(summary.people)}</strong> fans
+              </span>
+            )}
+          </p>
+        )}
+      </div>
+      <div className={`flex w-16 items-center justify-center border-l-2 border-dashed ${style.stub}`}>
+        <span className="rotate-180 text-[15px] font-extrabold [writing-mode:vertical-rl]">
+          {empty ? 'Import' : 'Open'}
+        </span>
+      </div>
+    </Link>
+  )
+}
 
-      {previews.length > 0 && (
-        <div className="mt-4 grid grid-cols-4 gap-2">
-          {previews.map((p) => (
+async function WorthAnotherLook({ space }: { space: Space }) {
+  const supabase = await createClient()
+  const featured = await getFeaturedDay(supabase, space.id)
+  if (!featured) return null
+
+  const paths = featured.thumbs ?? []
+  const { data: signed } = paths.length
+    ? await supabase.storage.from('media').createSignedUrls(paths, 3600)
+    : { data: [] }
+  const urls = (signed ?? []).flatMap((s) => (s.signedUrl ? [s.signedUrl] : []))
+
+  return (
+    <section className="mt-8" aria-labelledby="worth-another-look">
+      <h2 id="worth-another-look" className="text-[22px] font-extrabold">
+        Worth another look
+      </h2>
+      <Link
+        href={`/timeline?space=${space.id}&month=${featured.day.slice(0, 7)}#d-${featured.day}`}
+        className="mt-3 flex items-center gap-4 rounded-2xl bg-card p-3"
+      >
+        <div className="flex shrink-0 gap-1" aria-hidden="true">
+          {urls.slice(0, 2).map((url, i) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              key={p.path}
-              src={p.url}
+              key={url}
+              src={url}
               alt=""
-              className="aspect-square w-full rounded-lg object-cover"
+              className={`h-[74px] w-[58px] rounded-[10px] object-cover ${i === 0 ? '-rotate-3' : 'rotate-2'}`}
             />
           ))}
         </div>
-      )}
-
-      {sources && sources.length > 0 && (
-        <ul className="mt-4 space-y-1 text-sm">
-          {sources.map((source) => (
-            <li key={source.id}>
-              {source.label}
-              <span className="opacity-60">
-                {source.status === 'complete' ? ' · imported' : ' · import not finished'}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="mt-5 flex flex-wrap gap-3">
-        {!isEmpty && (
-          <Link
-            href={`/timeline?space=${space.id}`}
-            className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"
-          >
-            Open the timeline
-          </Link>
-        )}
-        <Link
-          href={`/import?space=${space.id}`}
-          className={
-            isEmpty
-              ? 'rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90'
-              : 'rounded-lg border border-current/25 px-4 py-2 text-sm hover:border-current/50'
-          }
-        >
-          Import
-        </Link>
-      </div>
-    </div>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-[17px] font-extrabold">{longDay(featured.day)}</span>
+          {featured.caption && <span className="truncate text-[15px] text-muted">{featured.caption}</span>}
+          <span className="text-[15px] text-muted">{plural(featured.photos, 'photo')}</span>
+        </div>
+      </Link>
+    </section>
   )
 }

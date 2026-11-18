@@ -1,26 +1,49 @@
 @import "tailwindcss";
 
+/* Memory Vault – "Fan Club" look: playful identity, calm photo layout */
+@theme {
+  --color-paper: #f4f6fb;     /* page background */
+  --color-card: #ffffff;      /* raised surfaces */
+  --color-ink: #1a2044;       /* text */
+  --color-muted: #4a5170;     /* secondary text (passes 4.5:1 on paper) */
+  --color-line: #e1e5f2;      /* hairlines */
+  --color-cobalt: #2f4bff;    /* the accent */
+  --color-cobalt-soft: #e8ebff;
+  --color-sunny: #ffd23f;     /* favourites, highlights */
+  --color-night: #10142e;     /* photo viewer */
+  --color-night-2: #232a52;
+  --color-night-muted: #b8beda;
+
+  --font-sans: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: env(safe-area-inset-top, 0px);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.4;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-cobalt);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
 }

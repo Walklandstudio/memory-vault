@@ -158,17 +158,17 @@ export function Importer() {
   }
 
   if (spaceError) return <Notice tone="error">{spaceError}</Notice>
-  if (!space) return <p className="mt-8 text-sm opacity-70">Loading…</p>
+  if (!space) return <p className="mt-8 text-[15px] text-muted">Loading…</p>
 
   return (
     <div className="mt-8 space-y-6">
       {spaces.length > 1 && !busy && state.step !== 'finished' ? (
-        <label className="block text-sm">
+        <label className="block text-[16px]">
           Importing into{' '}
           <select
             value={space.id}
             onChange={(e) => setSpaceId(e.target.value)}
-            className="ml-1 rounded-lg border border-current/25 bg-transparent px-2 py-1 font-semibold"
+            className="ml-1 h-11 rounded-xl border-2 border-line bg-card px-2 font-semibold"
           >
             {spaces.map((s) => (
               <option key={s.id} value={s.id}>
@@ -178,15 +178,15 @@ export function Importer() {
           </select>
         </label>
       ) : (
-        <p className="text-sm">
+        <p className="text-[16px]">
           Importing into <strong>{space.name}</strong>
         </p>
       )}
 
       {(state.step === 'choose' || state.step === 'error' || state.step === 'finished') && (
-        <label className="block cursor-pointer rounded-xl border-2 border-dashed border-current/25 p-8 text-center hover:border-current/50">
+        <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-[#9aa3c7] bg-card p-8 text-center">
           <span className="font-medium">Choose a WhatsApp or Instagram export (.zip)</span>
-          <span className="mt-1 block text-sm opacity-70">Large files are fine</span>
+          <span className="mt-1 block text-[15px] text-muted">Large files are fine</span>
           <input
             type="file"
             accept=".zip,application/zip"
@@ -202,31 +202,31 @@ export function Importer() {
 
       {state.step === 'error' && <Notice tone="error">{state.message}</Notice>}
 
-      {state.step === 'reading' && <p className="text-sm opacity-70">Reading {state.fileName}…</p>}
+      {state.step === 'reading' && <p className="text-[15px] text-muted">Reading {state.fileName}…</p>}
 
       {state.step === 'ready' && (
         <div className="space-y-4">
           <SummaryCard summary={state.summary} />
           {state.kind === 'instagram' && (
-            <p className="text-sm opacity-70">
+            <p className="text-[15px] text-muted">
               Only your posts, reels and stories are imported. Your direct messages, likes, ads
               data and post locations are ignored and never leave this computer.
             </p>
           )}
-          <p className="text-sm opacity-70">
+          <p className="text-[15px] text-muted">
             Messages already in your archive are skipped, so it’s safe to import a chat again to
             finish an upload that stopped.
           </p>
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => startImport(state.fileName, state.kind, state.parsed, state.summary)}
-              className="rounded-lg bg-foreground px-4 py-2 font-medium text-background hover:opacity-90"
+              className="rounded-lg bg-cobalt px-5 py-3 font-semibold text-white"
             >
               {state.kind === 'instagram' ? 'Import posts, photos & videos' : 'Import messages, photos & videos'}
             </button>
             <button
               onClick={() => setState({ step: 'choose' })}
-              className="rounded-lg border border-current/25 px-4 py-2 hover:border-current/50"
+              className="rounded-2xl border-2 border-line bg-card px-5 py-3 font-semibold"
             >
               Choose a different file
             </button>
@@ -292,7 +292,7 @@ function FinishedNotice({
             {media.failed.length} file{media.failed.length === 1 ? '' : 's'} couldn’t be uploaded.
             Choose the same zip again to retry just those. The first problem was:
           </p>
-          <p className="mt-1 font-mono text-xs">
+          <p className="mt-1 text-[14px]">
             {media.failed[0].fileName}: {media.failed[0].reason}
           </p>
         </div>
@@ -326,15 +326,15 @@ function Progress({
   return (
     <div className="space-y-3">
       <SummaryCard summary={summary} />
-      <p className="text-sm">{label}</p>
-      <div className="h-2 overflow-hidden rounded-full bg-current/10">
+      <p className="text-[16px]">{label}</p>
+      <div className="h-3 overflow-hidden rounded-full bg-line">
         <div
-          className="h-full bg-foreground transition-all"
+          className="h-full bg-cobalt transition-all"
           style={{ width: `${Math.round(fraction * 100)}%` }}
         />
       </div>
-      {detail && <p className="truncate font-mono text-xs opacity-60">{detail}</p>}
-      <p className="text-xs opacity-60">
+      {detail && <p className="truncate font-mono text-[14px] text-muted">{detail}</p>}
+      <p className="text-[14px] text-muted">
         Keep this tab open and your Mac plugged in until it finishes. Large chats can take a while.
       </p>
     </div>
@@ -351,17 +351,17 @@ function SummaryCard({ summary }: { summary: ExportSummary }) {
     ['Photos, videos & voice notes', summary.attachmentsReferenced.toLocaleString()],
   ]
   return (
-    <div className="rounded-xl border border-current/20 p-5">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+    <div className="rounded-2xl bg-card p-5">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5 text-[15px]">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
-            <dt className="opacity-70">{label}</dt>
+            <dt className="text-muted">{label}</dt>
             <dd className="font-medium">{value}</dd>
           </div>
         ))}
       </dl>
       {(summary.attachmentsMissingFromZip > 0 || summary.omittedByWhatsApp > 0) && (
-        <p className="mt-4 text-sm opacity-80">
+        <p className="mt-4 text-[15px] text-muted">
           {summary.omittedByWhatsApp > 0 &&
             `${summary.omittedByWhatsApp} photo${summary.omittedByWhatsApp === 1 ? ' was' : 's were'} left out by WhatsApp; their captions will still be kept. `}
           {summary.attachmentsMissingFromZip > 0 &&
@@ -374,8 +374,8 @@ function SummaryCard({ summary }: { summary: ExportSummary }) {
 
 function Notice({ tone, children }: { tone: 'error' | 'success'; children: React.ReactNode }) {
   const styles =
-    tone === 'error' ? 'border-red-600/40 text-red-700 dark:text-red-400' : 'border-green-600/40'
-  return <div className={`rounded-xl border p-5 text-sm ${styles}`}>{children}</div>
+    tone === 'error' ? 'border-[#B3261E]/40 bg-card text-[#B3261E]' : 'border-[#0E7A5F]/40 bg-card'
+  return <div className={`rounded-2xl border-2 p-5 text-[16px] ${styles}`}>{children}</div>
 }
 
 /** Stops the screen (and the upload) going to sleep, where the browser supports it. */
