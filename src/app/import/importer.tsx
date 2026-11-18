@@ -46,23 +46,28 @@ const formatBytes = (bytes: number) =>
   bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : `${Math.round(bytes / 1e6)} MB`
 
 export function Importer() {
-  const [space, setSpace] = useState<Space | null>(null)
+  const [spaces, setSpaces] = useState<Space[]>([])
+  const [spaceId, setSpaceId] = useState<string | null>(null)
   const [spaceError, setSpaceError] = useState<string | null>(null)
+  const space = spaces.find((s) => s.id === spaceId) ?? null
   const [state, setState] = useState<State>({ step: 'choose' })
   const openZip = useRef<OpenedExport | null>(null)
   const busy = state.step === 'messages' || state.step === 'media'
 
   useEffect(() => {
     const supabase = createClient()
+    // The archive chosen on the home page arrives as ?space=… in the address
+    const requested = new URLSearchParams(window.location.search).get('space')
     supabase
       .from('spaces')
       .select('id, name')
       .order('created_at')
-      .limit(1)
       .then(({ data, error }) => {
-        if (error) setSpaceError(error.message)
-        else if (!data?.length) setSpaceError('No archive is linked to your account yet.')
-        else setSpace(data[0] as Space)
+        if (error) return setSpaceError(error.message)
+        const list = (data ?? []) as Space[]
+        if (!list.length) return setSpaceError('No archive is linked to your account yet.')
+        setSpaces(list)
+        setSpaceId(list.find((s) => s.id === requested)?.id ?? list[0].id)
       })
     return () => {
       openZip.current?.close()
@@ -139,9 +144,26 @@ export function Importer() {
 
   return (
     <div className="mt-8 space-y-6">
-      <p className="text-sm">
-        Importing into <strong>{space.name}</strong>
-      </p>
+      {spaces.length > 1 && !busy && state.step !== 'finished' ? (
+        <label className="block text-sm">
+          Importing into{' '}
+          <select
+            value={space.id}
+            onChange={(e) => setSpaceId(e.target.value)}
+            className="ml-1 rounded-lg border border-current/25 bg-transparent px-2 py-1 font-semibold"
+          >
+            {spaces.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <p className="text-sm">
+          Importing into <strong>{space.name}</strong>
+        </p>
+      )}
 
       {(state.step === 'choose' || state.step === 'error' || state.step === 'finished') && (
         <label className="block cursor-pointer rounded-xl border-2 border-dashed border-current/25 p-8 text-center hover:border-current/50">
@@ -205,12 +227,18 @@ export function Importer() {
         />
       )}
 
-      {state.step === 'finished' && <FinishedNotice state={state} />}
+      {state.step === 'finished' && <FinishedNotice state={state} spaceId={space.id} />}
     </div>
   )
 }
 
-function FinishedNotice({ state }: { state: Extract<State, { step: 'finished' }> }) {
+function FinishedNotice({
+  state,
+  spaceId,
+}: {
+  state: Extract<State, { step: 'finished' }>
+  spaceId: string
+}) {
   const { summary, totals, media, resumed } = state
   const uploaded = media.done - media.missingFromZip - media.failed.length
   return (
@@ -246,10 +274,15 @@ function FinishedNotice({ state }: { state: Extract<State, { step: 'finished' }>
         </div>
       )}
       <p className="mt-3">
-        <Link href="/" className="underline">
-          Back to your archive
+        <Link href={`/timeline?space=${spaceId}`} className="underline">
+          Open the timeline
         </Link>{' '}
-        or choose another zip to import.
+        or{' '}
+        <Link href="/" className="underline">
+          go back to your archives
+        </Link>
+        , or
+        choose another zip to import.
       </p>
     </Notice>
   )

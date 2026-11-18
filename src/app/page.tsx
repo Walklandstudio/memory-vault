@@ -2,8 +2,12 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getSpaces, type Space } from '@/lib/timeline/data'
+import { createArchive } from './actions'
 
-export default function Home() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>
+
+export default function Home({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 p-6">
       <header className="flex items-center justify-between">
@@ -16,14 +20,15 @@ export default function Home() {
       </header>
 
       {/* Anything that reads the login session loads inside this boundary */}
-      <Suspense fallback={<p className="mt-10 text-sm opacity-70">Opening your archive…</p>}>
-        <Archive />
+      <Suspense fallback={<p className="mt-10 text-sm opacity-70">Opening your archives…</p>}>
+        <Archives searchParams={searchParams} />
       </Suspense>
     </main>
   )
 }
 
-async function Archive() {
+async function Archives({ searchParams }: { searchParams: SearchParams }) {
+  const { error: formError } = await searchParams
   const supabase = await createClient()
 
   // Always verify who is signed in on the server before showing anything.
@@ -31,32 +36,86 @@ async function Archive() {
   const claims = data?.claims
   if (!claims) redirect('/login')
 
-  const { data: spaces, error } = await supabase
-    .from('spaces')
-    .select('id, name, created_at')
-    .order('created_at')
+  let spaces: Space[] = []
+  let loadError: string | null = null
+  try {
+    spaces = await getSpaces(supabase)
+  } catch (err) {
+    loadError = err instanceof Error ? err.message : String(err)
+  }
 
-  const { count: messageCount } = await supabase
-    .from('messages')
-    .select('*', { count: 'exact', head: true })
+  return (
+    <>
+      <p className="mt-2 text-sm opacity-70">Signed in as {String(claims.email ?? '')}</p>
 
-  const { data: sources } = await supabase
-    .from('sources')
-    .select('id, label, status')
-    .order('imported_at')
+      <section className="mt-10 space-y-6">
+        {loadError && (
+          <p className="rounded-lg border border-red-600/40 p-4 text-sm text-red-600">
+            Couldn’t load your archives: {loadError}
+          </p>
+        )}
 
-  const { count: mediaCount } = await supabase
-    .from('media')
-    .select('*', { count: 'exact', head: true })
+        {spaces.map((space) => (
+          <ArchiveCard key={space.id} space={space} />
+        ))}
+
+        <form action={createArchive} className="rounded-xl border border-dashed border-current/25 p-6">
+          <label htmlFor="new-archive" className="font-medium">
+            Create a new archive
+          </label>
+          <p className="mt-1 text-sm opacity-70">
+            Each archive has its own timeline, imports and privacy.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <input
+              id="new-archive"
+              name="name"
+              required
+              maxLength={100}
+              placeholder="e.g. My Instagram"
+              className="min-w-0 flex-1 rounded-lg border border-current/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-current/60"
+            />
+            <button
+              type="submit"
+              className="rounded-lg border border-current/25 px-4 py-2 text-sm hover:border-current/50"
+            >
+              Create archive
+            </button>
+          </div>
+          {formError && (
+            <p className="mt-3 text-sm text-red-600" role="alert">
+              {formError === 'name' ? 'Please give the archive a name.' : 'The archive couldn’t be created. Please try again.'}
+            </p>
+          )}
+        </form>
+      </section>
+    </>
+  )
+}
+
+async function ArchiveCard({ space }: { space: Space }) {
+  const supabase = await createClient()
+
+  const [{ count: messageCount }, { count: mediaCount }, { data: sources }, { data: recent }] =
+    await Promise.all([
+      supabase.from('messages').select('*', { count: 'exact', head: true }).eq('space_id', space.id),
+      supabase.from('media').select('*', { count: 'exact', head: true }).eq('space_id', space.id),
+      supabase
+        .from('sources')
+        .select('id, label, status')
+        .eq('space_id', space.id)
+        .order('imported_at'),
+      supabase
+        .from('media')
+        .select('id, thumb_path')
+        .eq('space_id', space.id)
+        .eq('kind', 'photo')
+        .not('thumb_path', 'is', null)
+        .order('taken_at', { ascending: false })
+        .limit(8),
+    ])
 
   // Latest previews, shown through short-lived private links (valid for 1 hour)
-  const { data: recent } = await supabase
-    .from('media')
-    .select('id, thumb_path')
-    .not('thumb_path', 'is', null)
-    .eq('kind', 'photo')
-    .order('taken_at', { ascending: false })
-    .limit(8)
   const thumbPaths = (recent ?? []).map((m) => m.thumb_path as string)
   const { data: signed } = thumbPaths.length
     ? await supabase.storage.from('media').createSignedUrls(thumbPaths, 3600)
@@ -64,73 +123,64 @@ async function Archive() {
   const previews = (signed ?? []).flatMap((s) =>
     s.signedUrl ? [{ path: s.path ?? s.signedUrl, url: s.signedUrl }] : []
   )
+  const isEmpty = (messageCount ?? 0) === 0 && (mediaCount ?? 0) === 0
 
   return (
-    <>
-      <p className="mt-2 text-sm opacity-70">Signed in as {String(claims.email ?? '')}</p>
+    <div className="rounded-xl border border-current/20 p-6">
+      <h2 className="text-xl font-medium">{space.name}</h2>
+      <p className="mt-1 text-sm opacity-70">
+        {isEmpty
+          ? 'Nothing imported yet.'
+          : `${(messageCount ?? 0).toLocaleString()} messages and ${(mediaCount ?? 0).toLocaleString()} photos, videos & voice notes preserved so far.`}
+      </p>
 
-      <section className="mt-10 space-y-4">
-        {error && (
-          <p className="rounded-lg border border-red-600/40 p-4 text-sm text-red-600">
-            Couldn’t load your archives: {error.message}
-          </p>
+      {previews.length > 0 && (
+        <div className="mt-4 grid grid-cols-4 gap-2">
+          {previews.map((p) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={p.path}
+              src={p.url}
+              alt=""
+              className="aspect-square w-full rounded-lg object-cover"
+            />
+          ))}
+        </div>
+      )}
+
+      {sources && sources.length > 0 && (
+        <ul className="mt-4 space-y-1 text-sm">
+          {sources.map((source) => (
+            <li key={source.id}>
+              {source.label}
+              <span className="opacity-60">
+                {source.status === 'complete' ? ' · imported' : ' · import not finished'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-5 flex flex-wrap gap-3">
+        {!isEmpty && (
+          <Link
+            href={`/timeline?space=${space.id}`}
+            className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"
+          >
+            Open the timeline
+          </Link>
         )}
-
-        {!error && spaces?.length === 0 && (
-          <p className="rounded-lg border border-current/20 p-4 text-sm">
-            You’re signed in, but no archive is linked to your account yet.
-          </p>
-        )}
-
-        {spaces?.map((space) => (
-          <div key={space.id} className="rounded-xl border border-current/20 p-6">
-            <h2 className="text-xl font-medium">{space.name}</h2>
-            <p className="mt-1 text-sm opacity-70">
-              {(messageCount ?? 0).toLocaleString()} messages and{' '}
-              {(mediaCount ?? 0).toLocaleString()} photos, videos & voice notes preserved so far.
-            </p>
-            {previews.length > 0 && (
-              <div className="mt-4 grid grid-cols-4 gap-2">
-                {previews.map((p) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    key={p.path}
-                    src={p.url}
-                    alt=""
-                    className="aspect-square w-full rounded-lg object-cover"
-                  />
-                ))}
-              </div>
-            )}
-            {sources && sources.length > 0 && (
-              <ul className="mt-4 space-y-1 text-sm">
-                {sources.map((source) => (
-                  <li key={source.id}>
-                    {source.label}
-                    <span className="opacity-60">
-                      {source.status === 'complete' ? ' · imported' : ' · import not finished'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link
-                href="/timeline"
-                className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"
-              >
-                Open the timeline
-              </Link>
-              <Link
-                href="/import"
-                className="rounded-lg border border-current/25 px-4 py-2 text-sm hover:border-current/50"
-              >
-                Import a WhatsApp chat
-              </Link>
-            </div>
-          </div>
-        ))}
-      </section>
-    </>
+        <Link
+          href={`/import?space=${space.id}`}
+          className={
+            isEmpty
+              ? 'rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90'
+              : 'rounded-lg border border-current/25 px-4 py-2 text-sm hover:border-current/50'
+          }
+        >
+          Import
+        </Link>
+      </div>
+    </div>
   )
 }

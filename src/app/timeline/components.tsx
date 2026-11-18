@@ -24,7 +24,16 @@ const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n ==
 
 // ---------- Navigation ----------
 
-export function MonthNav({ months, current }: { months: MonthSummary[]; current: string | null }) {
+export function MonthNav({
+  spaceId,
+  months,
+  current,
+}: {
+  spaceId: string
+  months: MonthSummary[]
+  current: string | null
+}) {
+  const href = (month: string) => `/timeline?space=${spaceId}&month=${month}`
   const years = [...new Set(months.map((m) => m.month.slice(0, 4)))]
   const currentYear = (current ?? months[months.length - 1].month).slice(0, 4)
   const yearMonths = months.filter((m) => m.month.startsWith(currentYear))
@@ -38,7 +47,7 @@ export function MonthNav({ months, current }: { months: MonthSummary[]; current:
           return (
             <Link
               key={year}
-              href={`/timeline?month=${latest}`}
+              href={href(latest)}
               className={`rounded-full px-3 py-1 text-sm ${
                 active ? 'bg-foreground text-background' : 'border border-current/20 hover:border-current/50'
               }`}
@@ -53,7 +62,7 @@ export function MonthNav({ months, current }: { months: MonthSummary[]; current:
           {yearMonths.map((m) => (
             <Link
               key={m.month}
-              href={`/timeline?month=${m.month}`}
+              href={href(m.month)}
               className={`rounded-lg px-2.5 py-1 text-xs ${
                 m.month === current
                   ? 'bg-current/15 font-semibold'
@@ -81,21 +90,30 @@ export function MonthHeader({ summary }: { summary: MonthSummary }) {
   )
 }
 
-export function PrevNext({ months, current }: { months: MonthSummary[]; current: string }) {
+export function PrevNext({
+  spaceId,
+  months,
+  current,
+}: {
+  spaceId: string
+  months: MonthSummary[]
+  current: string
+}) {
+  const href = (month: string) => `/timeline?space=${spaceId}&month=${month}`
   const i = months.findIndex((m) => m.month === current)
   const prev = months[i - 1]
   const next = months[i + 1]
   return (
     <div className="mt-12 flex justify-between border-t border-current/15 pt-6 text-sm">
       {prev ? (
-        <Link href={`/timeline?month=${prev.month}`} className="underline opacity-80 hover:opacity-100">
+        <Link href={href(prev.month)} className="underline opacity-80 hover:opacity-100">
           ← {monthName(prev.month)}
         </Link>
       ) : (
         <span />
       )}
       {next ? (
-        <Link href={`/timeline?month=${next.month}`} className="underline opacity-80 hover:opacity-100">
+        <Link href={href(next.month)} className="underline opacity-80 hover:opacity-100">
           {monthName(next.month)} →
         </Link>
       ) : (
@@ -298,7 +316,15 @@ function highlight(text: string, query: string) {
   )
 }
 
-export function SearchResults({ query, hits }: { query: string; hits: SearchHit[] }) {
+export function SearchResults({
+  spaceId,
+  query,
+  hits,
+}: {
+  spaceId: string
+  query: string
+  hits: SearchHit[]
+}) {
   return (
     <section className="mt-8">
       <h2 className="text-2xl font-semibold">Results for “{query}”</h2>
@@ -311,7 +337,7 @@ export function SearchResults({ query, hits }: { query: string; hits: SearchHit[
         {hits.map((hit) => (
           <li key={hit.id}>
             <Link
-              href={`/timeline?month=${hit.localTime.slice(0, 7)}#m-${hit.id}`}
+              href={`/timeline?space=${spaceId}&month=${hit.localTime.slice(0, 7)}#m-${hit.id}`}
               className="block rounded-xl border border-current/10 p-4 hover:border-current/30"
             >
               <p className="text-xs opacity-60">

@@ -47,10 +47,20 @@ export interface SearchHit {
   body: string
 }
 
-export async function getFirstSpace(db: Db): Promise<Space | null> {
-  const { data, error } = await db.from('spaces').select('id, name').order('created_at').limit(1)
+/** Every archive the signed-in person belongs to, oldest first. */
+export async function getSpaces(db: Db): Promise<Space[]> {
+  const { data, error } = await db.from('spaces').select('id, name').order('created_at')
   if (error) throw new Error(error.message)
-  return (data?.[0] as Space | undefined) ?? null
+  return (data ?? []) as Space[]
+}
+
+/** The archive asked for in the URL, or the first one if none (or an unknown one) was asked for. */
+export function pickSpace(spaces: Space[], requested: unknown): Space | null {
+  return spaces.find((s) => s.id === requested) ?? spaces[0] ?? null
+}
+
+export async function getFirstSpace(db: Db): Promise<Space | null> {
+  return pickSpace(await getSpaces(db), null)
 }
 
 export async function getMonths(db: Db, spaceId: string): Promise<MonthSummary[]> {
