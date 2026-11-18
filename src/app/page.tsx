@@ -54,6 +54,7 @@ async function Archive() {
     .from('media')
     .select('id, thumb_path')
     .not('thumb_path', 'is', null)
+    .eq('kind', 'photo')
     .order('taken_at', { ascending: false })
     .limit(8)
   const thumbPaths = (recent ?? []).map((m) => m.thumb_path as string)
@@ -113,12 +114,20 @@ async function Archive() {
                 ))}
               </ul>
             )}
-            <Link
-              href="/import"
-              className="mt-5 inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"
-            >
-              Import a WhatsApp chat
-            </Link>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link
+                href="/timeline"
+                className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90"
+              >
+                Open the timeline
+              </Link>
+              <Link
+                href="/import"
+                className="rounded-lg border border-current/25 px-4 py-2 text-sm hover:border-current/50"
+              >
+                Import a WhatsApp chat
+              </Link>
+            </div>
           </div>
         ))}
       </section>
